@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing.Text;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -14,6 +15,9 @@ public static class VisualizerTask
     public static double Elbow = 3 * Math.PI / 4;
     public static double Shoulder = Math.PI / 2;
 
+    private static readonly double DeltaAngel = 0.1;
+    private static readonly double KneeRadius = 10;
+
     public static Brush UnreachableAreaBrush = new SolidColorBrush(Color.FromArgb(255, 255, 230, 230));
     public static Brush ReachableAreaBrush = new SolidColorBrush(Color.FromArgb(255, 230, 255, 230));
     public static Pen ManipulatorPen = new Pen(Brushes.Black, 3);
@@ -21,31 +25,57 @@ public static class VisualizerTask
 
     public static void KeyDown(IDisplay display, KeyEventArgs key)
     {
-        // TODO: Добавьте реакцию на QAWS и пересчитывать Wrist
-        
+        switch (key)
+        {
+            case { Key: Key.Q }:
+                Shoulder.ChangeAngle();
+                break;
+            case { Key: Key.A }:
+                Shoulder.ChangeAngle(false);
+                break;
+            case { Key: Key.W }:
+                Elbow.ChangeAngle();
+                break;
+            case { Key: Key.S }:
+                Elbow.ChangeAngle(false);
+                break;
+        }
+
+        Wrist = -Alpha - Shoulder - Elbow;
+
         display.InvalidateVisual(); // вызывает перерисовку канваса
+    }
+
+    private static void ChangeAngle(this ref double angle, bool add = true)
+    {
+        angle = add ? angle + DeltaAngel : angle - DeltaAngel;
     }
     
     public static void MouseMove(IDisplay display, PointerEventArgs e)
     {
-	    // TODO: Измените X и Y пересчитав координаты (e.X, e.Y) в логические.
-        
+        var windowPoint = e.GetPosition(display);
+        var shoulderPos = GetShoulderPos(display);
+        var mathPoint = ConvertWindowToMath(windowPoint, shoulderPos);
+        X = mathPoint.X;
+        Y = mathPoint.Y;
+
 	    UpdateManipulator();
 	    display.InvalidateVisual();
     }
     
     public static void MouseWheel(IDisplay display, PointerWheelEventArgs e)
     {
-	    // TODO: Измените Alpha, используя e.Delta.Y — размер прокрутки колеса мыши
-	    
+        Alpha += e.Delta.Y;
 	    UpdateManipulator();
 	    display.InvalidateVisual();
     }
 
     public static void UpdateManipulator()
     {
-        // Вызовите ManipulatorTask.MoveManipulatorTo и обновите значения полей Shoulder, Elbow и Wrist, 
-        // если они не NaN. Это понадобится для последней задачи.
+        var values = ManipulatorTask.MoveManipulatorTo(X, Y, Alpha);
+        if (!double.IsNaN(values[0])) Shoulder = values[0];
+        if (!double.IsNaN(values[1])) Elbow = values[1];
+        if (!double.IsNaN(values[2])) Wrist = values[2];
     }
 
     public static void DrawManipulator(DrawingContext context, Point shoulderPos)
@@ -58,9 +88,17 @@ public static class VisualizerTask
             TextAlignment.Center, TextWrapping.Wrap, Size.Empty);
         context.DrawText(Brushes.DarkRed, new Point(10, 10), formattedText);
 
-        // Нарисуйте сегменты манипулятора методом ccontext.DrawLine(ManipulatorPen, ...)
-        // Нарисуйте суставы манипулятора окружностями методом context.DrawEllipse(JointBrush, null, ...)
-        // Не забудьте сконвертировать координаты из логических в оконные
+        var elbowPos = ConvertMathToWindow(joints[0], shoulderPos);
+        var wristPos = ConvertMathToWindow(joints[1], shoulderPos);
+        var palmEndPos = ConvertMathToWindow(joints[2], shoulderPos);
+
+        context.DrawLine(ManipulatorPen, shoulderPos, elbowPos);
+        context.DrawLine(ManipulatorPen, elbowPos, wristPos);
+        context.DrawLine(ManipulatorPen, wristPos, palmEndPos);
+        
+        context.DrawEllipse(JointBrush, null, shoulderPos, KneeRadius, KneeRadius);
+        context.DrawEllipse(JointBrush, null, elbowPos, KneeRadius, KneeRadius);
+        context.DrawEllipse(JointBrush, null, wristPos, KneeRadius, KneeRadius);
     }
 
     private static void DrawReachableZone(
