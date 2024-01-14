@@ -65,7 +65,8 @@ public static class VisualizerTask
     
     public static void MouseWheel(IDisplay display, PointerWheelEventArgs e)
     {
-        Alpha += e.Delta.Y;
+        //Alpha += e.Delta.Y;
+        Alpha += e.Delta.Y > 0 ? 0.1 : -0.1;
 	    UpdateManipulator();
 	    display.InvalidateVisual();
     }
